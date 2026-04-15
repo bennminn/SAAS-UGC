@@ -14,7 +14,11 @@ enum Role {
 
 enum VideoStatus {
   PENDING
-  PROCESSING
+  GENERATING_FRAMES
+  AWAITING_FRAME_SELECTION
+  GENERATING_CLIPS
+  GENERATING_AUDIO
+  COMPOSING
   COMPLETED
   FAILED
 }
@@ -24,13 +28,29 @@ enum Platform {
   REELS
 }
 
+enum VideoProviderName {
+  SEEDANCE
+  KLING
+  WAN
+}
+
 enum GenerationStatus {
   QUEUED
   SCRIPT_READY
+  GENERATING_FRAMES
+  AWAITING_FRAME_SELECTION
+  GENERATING_CLIPS
   GENERATING_AUDIO
-  GENERATING_VIDEO
+  COMPOSING
   UPLOADING
   COMPLETED
+  FAILED
+}
+
+enum FrameClipStatus {
+  PENDING
+  GENERATING
+  DONE
   FAILED
 }
 
@@ -106,28 +126,53 @@ model Subscription {
 }
 
 model Video {
-  id            String      @id @default(cuid())
-  userId        String
-  title         String
-  status        VideoStatus @default(PENDING)
-  templateId    String?
-  avatarId      String
-  voiceId       String
-  script        String      @db.Text
-  platform      Platform    @default(TIKTOK)
-  duration      Int?
-  videoUrl      String?
-  thumbnailUrl  String?
-  providerJobId String?
-  errorMessage  String?
-  metadata      Json?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id              String            @id @default(cuid())
+  userId          String
+  title           String
+  status          VideoStatus       @default(PENDING)
+  templateId      String?
+  script          String            @db.Text
+  businessContext String?           @db.Text
+  platform        Platform          @default(TIKTOK)
+  style           String?
+  provider        VideoProviderName @default(SEEDANCE)
+  providerParams  Json?
+  imageParams     Json?
+  ttsParams       Json?
+  voiceId         String?
+  duration        Int?
+  videoUrl        String?
+  thumbnailUrl    String?
+  creditsCost     Int               @default(0)
+  errorMessage    String?
+  metadata        Json?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  frames     Frame[]
   generation Generation?
 
   @@index([userId, createdAt(sort: Desc)])
+}
+
+model Frame {
+  id        String          @id @default(cuid())
+  videoId   String
+  order     Int
+  prompt    String          @db.Text
+  imageUrl  String
+  selected  Boolean         @default(false)
+  clipStatus FrameClipStatus @default(PENDING)
+  clipJobId String?
+  clipUrl   String?
+  seed      Int?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@index([videoId, order])
 }
 
 model Generation {
@@ -136,7 +181,7 @@ model Generation {
   userId      String
   status      GenerationStatus @default(QUEUED)
   steps       Json
-  creditsUsed Int              @default(1)
+  creditsUsed Int              @default(0)
   startedAt   DateTime?
   completedAt DateTime?
   createdAt   DateTime         @default(now())
@@ -146,14 +191,14 @@ model Generation {
 }
 
 model Template {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  category    String
-  platform    Platform @default(TIKTOK)
+  id           String   @id @default(cuid())
+  name         String
+  description  String?
+  category     String
+  platform     Platform @default(TIKTOK)
   thumbnailUrl String?
-  isActive    Boolean  @default(true)
-  settings    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive     Boolean  @default(true)
+  settings     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }

@@ -10,7 +10,6 @@ export const PLANS = {
       "3 videos por mes",
       "Duracion maxima de 30 segundos",
       "Marca de agua",
-      "Avatares basicos",
       "Exportacion 720p",
     ],
     stripePriceId: null,
@@ -26,7 +25,7 @@ export const PLANS = {
       "50 videos por mes",
       "Duracion maxima de 60 segundos",
       "Sin marca de agua",
-      "Todos los avatares",
+      "Todos los proveedores de video",
       "Exportacion 1080p",
       "Soporte prioritario",
     ],
@@ -43,8 +42,8 @@ export const PLANS = {
       "200 videos por mes",
       "Duracion maxima de 90 segundos",
       "Sin marca de agua",
-      "Todos los avatares premium",
-      "Exportacion 4K",
+      "Modo avanzado con control total",
+      "Exportacion 1080p",
       "Soporte dedicado",
       "API access",
     ],
@@ -54,57 +53,57 @@ export const PLANS = {
 
 export type PlanId = keyof typeof PLANS;
 
-export const AVATARS = [
+export const VIDEO_STYLES = [
   {
-    id: "avatar-1",
-    name: "Sofia",
-    description: "Joven, energetica, ideal para productos de belleza y moda",
-    imageUrl: "/images/avatars/sofia.jpg",
-    heygenAvatarId: "sofia_avatar_id",
+    id: "cinematic",
+    name: "Cinematografico",
+    description: "Iluminacion dramatica, color grading cinematico, lentes anamorficas",
+    promptSuffix: "cinematic lighting, dramatic shadows, anamorphic lens, film grain, color graded",
   },
   {
-    id: "avatar-2",
-    name: "Carlos",
-    description: "Profesional, confiable, perfecto para tecnologia y finanzas",
-    imageUrl: "/images/avatars/carlos.jpg",
-    heygenAvatarId: "carlos_avatar_id",
+    id: "ugc-selfie",
+    name: "Selfie UGC",
+    description: "Camara en mano, luz natural, se siente autentico y casero",
+    promptSuffix: "handheld selfie shot, natural daylight, authentic vlog aesthetic, imperfect framing, raw look",
   },
   {
-    id: "avatar-3",
-    name: "Luna",
-    description: "Creativa, autentica, genial para lifestyle y bienestar",
-    imageUrl: "/images/avatars/luna.jpg",
-    heygenAvatarId: "luna_avatar_id",
+    id: "product-studio",
+    name: "Estudio de Producto",
+    description: "Producto limpio sobre superficie, luz de estudio, alta definicion",
+    promptSuffix: "clean product photography, softbox studio lighting, seamless background, ultra sharp detail",
   },
   {
-    id: "avatar-4",
-    name: "Diego",
-    description: "Dinamico, persuasivo, excelente para deportes y fitness",
-    imageUrl: "/images/avatars/diego.jpg",
-    heygenAvatarId: "diego_avatar_id",
+    id: "lifestyle",
+    name: "Lifestyle",
+    description: "Personas reales usando el producto en contexto, luz natural",
+    promptSuffix: "lifestyle photography, real people, natural daylight, candid moment, warm tones",
   },
   {
-    id: "avatar-5",
-    name: "Valentina",
-    description: "Elegante, sofisticada, ideal para lujo y gastronomia",
-    imageUrl: "/images/avatars/valentina.jpg",
-    heygenAvatarId: "valentina_avatar_id",
+    id: "minimal",
+    name: "Minimalista",
+    description: "Paleta reducida, espacios amplios, estetica limpia",
+    promptSuffix: "minimalist composition, negative space, muted palette, editorial style",
   },
   {
-    id: "avatar-6",
-    name: "Mateo",
-    description: "Casual, cercano, perfecto para productos del hogar",
-    imageUrl: "/images/avatars/mateo.jpg",
-    heygenAvatarId: "mateo_avatar_id",
+    id: "bold-pop",
+    name: "Pop Vibrante",
+    description: "Colores saturados, alto contraste, atencion inmediata",
+    promptSuffix: "vibrant saturated colors, high contrast pop style, bold graphic composition",
   },
-];
+] as const;
 
+export type VideoStyleId = (typeof VIDEO_STYLES)[number]["id"];
+
+// Cuanto cubre cada clip image-to-video, en segundos. Base para calcular N frames.
+export const SECONDS_PER_CLIP = 5;
+
+// Voces ElevenLabs sugeridas (el usuario puede usar cualquier voice_id personalizado en modo avanzado).
 export const VOICES = [
-  { id: "voice-1", name: "Sofia Natural", language: "es", gender: "female", elevenlabsVoiceId: "voice_sofia" },
-  { id: "voice-2", name: "Carlos Profesional", language: "es", gender: "male", elevenlabsVoiceId: "voice_carlos" },
-  { id: "voice-3", name: "Luna Energetica", language: "es", gender: "female", elevenlabsVoiceId: "voice_luna" },
-  { id: "voice-4", name: "Diego Dinamico", language: "es", gender: "male", elevenlabsVoiceId: "voice_diego" },
-];
+  { id: "rachel", name: "Rachel (ES-LA Natural)", elevenlabsVoiceId: "21m00Tcm4TlvDq8ikWAM", gender: "female", language: "es" },
+  { id: "antoni", name: "Antoni (ES-LA Profesional)", elevenlabsVoiceId: "ErXwobaYiN019PkySvjV", gender: "male", language: "es" },
+  { id: "bella", name: "Bella (ES-LA Energetica)", elevenlabsVoiceId: "EXAVITQu4vr4xnSDxMaL", gender: "female", language: "es" },
+  { id: "josh", name: "Josh (ES-LA Dinamico)", elevenlabsVoiceId: "TxGEqnHWrfWFTfGW9XjX", gender: "male", language: "es" },
+] as const;
 
 export const TEMPLATE_CATEGORIES = [
   { id: "resena-producto", name: "Resena de Producto", icon: "Star" },
@@ -113,7 +112,7 @@ export const TEMPLATE_CATEGORIES = [
   { id: "testimonial", name: "Testimonial", icon: "MessageCircle" },
   { id: "comparacion", name: "Comparacion", icon: "ArrowLeftRight" },
   { id: "antes-despues", name: "Antes y Despues", icon: "RefreshCw" },
-];
+] as const;
 
 export const VIDEO_TONES = [
   { id: "entusiasta", name: "Entusiasta", description: "Energetico y emocionado por el producto" },
@@ -121,4 +120,15 @@ export const VIDEO_TONES = [
   { id: "casual", name: "Casual", description: "Relajado y natural, como hablar con un amigo" },
   { id: "urgente", name: "Urgente", description: "Sentido de urgencia, ideal para ofertas" },
   { id: "storytelling", name: "Storytelling", description: "Narrativo, cuenta una historia personal" },
-];
+] as const;
+
+// Coste interno (en creditos fraccionarios) por componente. Solo para trazabilidad interna.
+// 1 credito = 1 video completo del plan del usuario.
+export const PROVIDER_PRICING = {
+  SEEDANCE: { clipCostUsd: 0.12, label: "Seedance 2.0 (ByteDance)" },
+  KLING: { clipCostUsd: 0.18, label: "Kling 2.x (Kuaishou)" },
+  WAN: { clipCostUsd: 0.08, label: "Wan 2.x (Alibaba)" },
+} as const;
+
+export const IMAGE_COST_USD = 0.04; // gpt-image-1 medium quality approx
+export const TTS_COST_USD_PER_SECOND = 0.002; // ElevenLabs approximation

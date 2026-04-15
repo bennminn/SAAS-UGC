@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 const mockVideos = [
   { id: "1", title: "Resena Crema Hidratante", platform: "TIKTOK", status: "COMPLETED", date: "2026-04-06", duration: 30 },
-  { id: "2", title: "Unboxing Auriculares Pro", platform: "REELS", status: "PROCESSING", date: "2026-04-05", duration: 45 },
+  { id: "2", title: "Unboxing Auriculares Pro", platform: "REELS", status: "GENERATING_CLIPS", date: "2026-04-05", duration: 45 },
   { id: "3", title: "Tutorial Serum Facial", platform: "TIKTOK", status: "FAILED", date: "2026-04-04", duration: 60 },
   { id: "4", title: "Comparacion Zapatillas", platform: "REELS", status: "COMPLETED", date: "2026-04-03", duration: 30 },
   { id: "5", title: "Testimonio Suplemento", platform: "TIKTOK", status: "COMPLETED", date: "2026-04-02", duration: 15 },
@@ -20,7 +20,11 @@ const mockVideos = [
 
 const statusMap: Record<string, { label: string; className: string }> = {
   COMPLETED: { label: "Completado", className: "bg-green-500/15 text-green-400 border-green-500/20" },
-  PROCESSING: { label: "En Proceso", className: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20" },
+  GENERATING_FRAMES: { label: "Generando frames", className: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20" },
+  AWAITING_FRAME_SELECTION: { label: "Eligiendo frames", className: "bg-blue-500/15 text-blue-400 border-blue-500/20" },
+  GENERATING_CLIPS: { label: "Animando", className: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20" },
+  GENERATING_AUDIO: { label: "Generando audio", className: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20" },
+  COMPOSING: { label: "Componiendo", className: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20" },
   FAILED: { label: "Fallido", className: "bg-red-500/15 text-red-400 border-red-500/20" },
   PENDING: { label: "Pendiente", className: "bg-gray-500/15 text-gray-400 border-gray-500/20" },
 };
@@ -58,7 +62,7 @@ export default function VideosPage() {
         <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="all">Todos los estados</option>
           <option value="COMPLETED">Completado</option>
-          <option value="PROCESSING">En Proceso</option>
+          <option value="GENERATING_CLIPS">En Proceso</option>
           <option value="FAILED">Fallido</option>
         </Select>
       </div>

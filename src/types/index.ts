@@ -1,14 +1,29 @@
-export type VideoStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+export type VideoStatus =
+  | "PENDING"
+  | "GENERATING_FRAMES"
+  | "AWAITING_FRAME_SELECTION"
+  | "GENERATING_CLIPS"
+  | "GENERATING_AUDIO"
+  | "COMPOSING"
+  | "COMPLETED"
+  | "FAILED";
+
 export type Platform = "TIKTOK" | "REELS";
+
 export type GenerationStatus =
   | "QUEUED"
   | "SCRIPT_READY"
+  | "GENERATING_FRAMES"
+  | "AWAITING_FRAME_SELECTION"
+  | "GENERATING_CLIPS"
   | "GENERATING_AUDIO"
-  | "GENERATING_VIDEO"
+  | "COMPOSING"
   | "UPLOADING"
   | "COMPLETED"
   | "FAILED";
+
 export type Role = "USER" | "ADMIN";
+export type VideoProviderName = "SEEDANCE" | "KLING" | "WAN";
 
 export interface GenerateScriptRequest {
   productName: string;
@@ -19,13 +34,27 @@ export interface GenerateScriptRequest {
   category: string;
 }
 
-export interface GenerateVideoRequest {
+export interface GenerateFramesRequest {
   title: string;
   script: string;
-  avatarId: string;
-  voiceId: string;
-  templateId?: string;
+  businessContext?: string;
   platform: Platform;
+  duration: number;
+  style?: string;
+  provider: VideoProviderName;
+  providerParams?: Record<string, unknown>;
+  imageParams?: Record<string, unknown>;
+  ttsParams?: Record<string, unknown>;
+  voiceId?: string;
+}
+
+export interface Frame {
+  id: string;
+  order: number;
+  prompt: string;
+  imageUrl: string;
+  selected: boolean;
+  clipUrl: string | null;
 }
 
 export interface VideoWithGeneration {
@@ -33,8 +62,7 @@ export interface VideoWithGeneration {
   title: string;
   status: VideoStatus;
   templateId: string | null;
-  avatarId: string;
-  voiceId: string;
+  provider: VideoProviderName;
   script: string;
   platform: Platform;
   duration: number | null;

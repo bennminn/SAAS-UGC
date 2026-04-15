@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Check,
@@ -9,8 +9,9 @@ import {
   Loader2,
   Play,
   RefreshCw,
-  User,
+  Sparkles,
   Volume2,
+  Wand2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,200 +19,277 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
-import { AVATARS, VOICES, VIDEO_TONES } from "@/lib/constants";
+import {
+  VIDEO_TONES,
+  VIDEO_STYLES,
+  VOICES,
+  SECONDS_PER_CLIP,
+  PROVIDER_PRICING,
+} from "@/lib/constants";
+import {
+  listVideoProviders,
+  getVideoProvider,
+  PRESETS,
+  type VideoProviderName,
+} from "@/lib/video-providers";
+import { DEFAULT_IMAGE_PARAMS } from "@/lib/image-gen";
+import { TTS_PARAMS_SCHEMA, DEFAULT_TTS_PARAMS } from "@/lib/tts";
+import { ParamField, groupParams } from "@/components/generate/param-field";
 import { cn } from "@/lib/utils";
 
 const STEPS = [
-  "Describe tu Producto",
-  "Edita el Script",
-  "Elige tu Avatar",
-  "Selecciona la Voz",
-  "Confirmar y Generar",
+  "Guion y contexto",
+  "Estilo y proveedor",
+  "Keyframes",
+  "Voz y audio",
+  "Confirmar",
 ];
+
+type Frame = {
+  id: string;
+  order: number;
+  imageUrl: string;
+  prompt: string;
+};
 
 export default function GeneratePage() {
   const router = useRouter();
-  const [currentStep, setCurrentStep] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [step, setStep] = useState(0);
+  const [advanced, setAdvanced] = useState(false);
 
   // Step 1
+  const [title, setTitle] = useState("");
   const [productName, setProductName] = useState("");
-  const [productDescription, setProductDescription] = useState("");
-  const [tone, setTone] = useState("");
+  const [businessContext, setBusinessContext] = useState("");
+  const [tone, setTone] = useState("casual");
   const [platform, setPlatform] = useState("TIKTOK");
-  const [duration, setDuration] = useState("30");
+  const [duration, setDuration] = useState(30);
+  const [script, setScript] = useState("");
+  const [loadingScript, setLoadingScript] = useState(false);
 
   // Step 2
-  const [script, setScript] = useState("");
+  const [style, setStyle] = useState<string>(VIDEO_STYLES[0].id);
+  const [provider, setProvider] = useState<VideoProviderName>("SEEDANCE");
+  const providers = useMemo(() => listVideoProviders(), []);
+  const providerDef = useMemo(() => getVideoProvider(provider), [provider]);
+  const [providerParams, setProviderParams] = useState<Record<string, unknown>>({
+    ...providerDef.defaults,
+  });
+  useEffect(() => {
+    setProviderParams({ ...getVideoProvider(provider).defaults });
+  }, [provider]);
+
+  const [imageParams, setImageParams] = useState<Record<string, unknown>>({
+    ...DEFAULT_IMAGE_PARAMS,
+  });
 
   // Step 3
-  const [selectedAvatar, setSelectedAvatar] = useState("");
+  const [videoId, setVideoId] = useState<string | null>(null);
+  const [frames, setFrames] = useState<Frame[]>([]);
+  const [selectedFrames, setSelectedFrames] = useState<Set<string>>(new Set());
+  const [generatingFrames, setGeneratingFrames] = useState(false);
+  const [regenerating, setRegenerating] = useState<string | null>(null);
 
   // Step 4
-  const [selectedVoice, setSelectedVoice] = useState("");
+  const [voiceId, setVoiceId] = useState<string>(VOICES[0].elevenlabsVoiceId);
+  const [ttsParams, setTtsParams] = useState<Record<string, unknown>>({
+    ...DEFAULT_TTS_PARAMS,
+    speed: 1.0,
+  });
+
+  const [submitting, setSubmitting] = useState(false);
+
+  const nFrames = useMemo(
+    () => Math.max(1, Math.ceil(duration / SECONDS_PER_CLIP)),
+    [duration]
+  );
 
   async function handleGenerateScript() {
-    setIsLoading(true);
+    setLoadingScript(true);
     try {
       const res = await fetch("/api/scripts/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           productName,
-          productDescription,
+          productDescription: businessContext,
           tone,
           platform,
-          duration: parseInt(duration),
+          duration,
+          category: "resena-producto",
         }),
       });
       const data = await res.json();
-      setScript(
-        data.script ||
-          `¡Hola! ¿Buscas ${productName}? Te cuento por que me encanta este producto. ${productDescription} No te lo pierdas, enlace en mi bio. 🔥`
-      );
-      setCurrentStep(1);
-    } catch {
-      setScript(
-        `¡Hola! ¿Buscas ${productName}? Te cuento por que me encanta este producto. ${productDescription} No te lo pierdas, enlace en mi bio. 🔥`
-      );
-      setCurrentStep(1);
+      if (data.script) setScript(data.script);
+    } catch (e) {
+      console.error(e);
     } finally {
-      setIsLoading(false);
+      setLoadingScript(false);
     }
   }
 
-  async function handleGenerateVideo() {
-    setIsGenerating(true);
+  async function handleGenerateFrames() {
+    setGeneratingFrames(true);
     try {
-      const res = await fetch("/api/videos/generate", {
+      const res = await fetch("/api/frames/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          title: title || productName || "Video UGC",
           script,
-          avatarId: selectedAvatar,
-          voiceId: selectedVoice,
+          businessContext,
           platform,
-          duration: parseInt(duration),
+          duration,
+          style,
+          provider,
+          providerParams,
+          imageParams,
+          ttsParams,
+          voiceId,
         }),
       });
       const data = await res.json();
-      router.push(`/generate/${data.id || "mock-video-1"}`);
-    } catch {
-      router.push("/generate/mock-video-1");
+      if (!res.ok) throw new Error(data.error || "Error");
+      setVideoId(data.videoId);
+      setFrames(data.frames);
+      setSelectedFrames(new Set(data.frames.map((f: Frame) => f.id)));
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setGeneratingFrames(false);
     }
   }
 
-  const canProceed = () => {
-    switch (currentStep) {
+  async function handleRegenerateFrame(frameId: string) {
+    setRegenerating(frameId);
+    try {
+      const res = await fetch("/api/frames/regenerate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ frameId }),
+      });
+      const data = await res.json();
+      if (data.frame) {
+        setFrames((prev) => prev.map((f) => (f.id === frameId ? data.frame : f)));
+      }
+    } finally {
+      setRegenerating(null);
+    }
+  }
+
+  function toggleFrame(id: string) {
+    setSelectedFrames((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleAnimate() {
+    if (!videoId) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/videos/${videoId}/animate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedFrameIds: Array.from(selectedFrames) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error");
+      router.push(`/generate/${videoId}`);
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function applyPreset(presetId: string) {
+    const p = PRESETS.find((x) => x.id === presetId);
+    if (!p) return;
+    const merge = p.params[provider];
+    if (merge) setProviderParams((prev) => ({ ...prev, ...merge }));
+  }
+
+  const canProceed = (() => {
+    switch (step) {
       case 0:
-        return productName && productDescription && tone;
+        return productName.length > 0 && script.length > 20;
       case 1:
-        return script.length > 0;
+        return Boolean(style && provider);
       case 2:
-        return selectedAvatar !== "";
+        return frames.length > 0 && selectedFrames.size > 0;
       case 3:
-        return selectedVoice !== "";
+        return Boolean(voiceId);
       case 4:
         return true;
       default:
         return false;
     }
-  };
+  })();
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Generar Video</h1>
-        <p className="mt-1 text-muted-foreground">
-          Sigue los pasos para crear tu video UGC
-        </p>
+    <div className="mx-auto max-w-5xl space-y-8">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Generar Video</h1>
+          <p className="mt-1 text-muted-foreground">
+            Guion → keyframes → animacion → narracion TTS
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={advanced}
+            onChange={(e) => setAdvanced(e.target.checked)}
+            className="h-4 w-4"
+          />
+          <Wand2 className="h-4 w-4" />
+          Modo avanzado
+        </label>
       </div>
 
-      {/* Step indicator */}
-      <div className="flex items-center justify-between">
-        {STEPS.map((step, index) => (
-          <div key={step} className="flex items-center">
-            <div className="flex flex-col items-center">
-              <div
-                className={cn(
-                  "flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-medium transition-colors",
-                  index < currentStep
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : index === currentStep
-                      ? "border-primary text-primary"
-                      : "border-muted text-muted-foreground"
-                )}
-              >
-                {index < currentStep ? (
-                  <Check className="h-5 w-5" />
-                ) : (
-                  index + 1
-                )}
-              </div>
-              <span
-                className={cn(
-                  "mt-2 hidden text-xs sm:block",
-                  index <= currentStep
-                    ? "text-foreground font-medium"
-                    : "text-muted-foreground"
-                )}
-              >
-                {step}
-              </span>
-            </div>
-            {index < STEPS.length - 1 && (
-              <div
-                className={cn(
-                  "mx-2 h-0.5 w-8 sm:w-16",
-                  index < currentStep ? "bg-primary" : "bg-muted"
-                )}
-              />
-            )}
-          </div>
-        ))}
-      </div>
+      <StepIndicator current={step} />
 
-      {/* Step content */}
       <Card>
         <CardHeader>
-          <CardTitle>{STEPS[currentStep]}</CardTitle>
+          <CardTitle>{STEPS[step]}</CardTitle>
         </CardHeader>
         <CardContent>
-          {/* Step 1: Product Description */}
-          {currentStep === 0 && (
+          {step === 0 && (
             <div className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">
-                  Nombre del Producto
-                </label>
-                <Input
-                  placeholder="Ej: Crema Hidratante XYZ"
-                  value={productName}
-                  onChange={(e) => setProductName(e.target.value)}
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Titulo (opcional)</label>
+                  <Input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Mi video UGC"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Producto / Marca</label>
+                  <Input
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    placeholder="Ej: Crema hidratante XYZ"
+                  />
+                </div>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">
-                  Descripcion del Producto
-                </label>
+                <label className="text-sm font-medium">Contexto de negocio</label>
                 <Textarea
-                  placeholder="Describe las caracteristicas principales, beneficios y publico objetivo..."
-                  rows={4}
-                  value={productDescription}
-                  onChange={(e) => setProductDescription(e.target.value)}
+                  rows={3}
+                  value={businessContext}
+                  onChange={(e) => setBusinessContext(e.target.value)}
+                  placeholder="Describe tu marca, publico objetivo, beneficios clave, estetica deseada..."
                 />
               </div>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">
-                    Tono
-                  </label>
-                  <Select
-                    value={tone}
-                    onChange={(e) => setTone(e.target.value)}
-                  >
-                    <option value="">Seleccionar tono...</option>
+                  <label className="text-sm font-medium">Tono</label>
+                  <Select value={tone} onChange={(e) => setTone(e.target.value)}>
                     {VIDEO_TONES.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.name}
@@ -220,9 +298,7 @@ export default function GeneratePage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">
-                    Plataforma
-                  </label>
+                  <label className="text-sm font-medium">Plataforma</label>
                   <Select
                     value={platform}
                     onChange={(e) => setPlatform(e.target.value)}
@@ -232,221 +308,364 @@ export default function GeneratePage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">
-                    Duracion
-                  </label>
+                  <label className="text-sm font-medium">Duracion (s)</label>
                   <Select
-                    value={duration}
-                    onChange={(e) => setDuration(e.target.value)}
+                    value={String(duration)}
+                    onChange={(e) => setDuration(Number(e.target.value))}
                   >
-                    <option value="15">15 segundos</option>
-                    <option value="30">30 segundos</option>
-                    <option value="60">60 segundos</option>
+                    <option value="15">15</option>
+                    <option value="30">30</option>
+                    <option value="45">45</option>
+                    <option value="60">60</option>
+                    <option value="90">90</option>
                   </Select>
                 </div>
               </div>
-              <Button
-                className="w-full"
-                size="lg"
-                disabled={!canProceed() || isLoading}
-                onClick={handleGenerateScript}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Generando Script...
-                  </>
-                ) : (
-                  "Generar Script con IA"
-                )}
-              </Button>
-            </div>
-          )}
-
-          {/* Step 2: Edit Script */}
-          {currentStep === 1 && (
-            <div className="space-y-4">
-              <Textarea
-                rows={8}
-                value={script}
-                onChange={(e) => setScript(e.target.value)}
-                placeholder="El script generado aparecera aqui..."
-              />
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  {script.length} caracteres
-                </span>
-                <Button
-                  variant="outline"
-                  onClick={handleGenerateScript}
-                  disabled={isLoading}
-                >
-                  <RefreshCw
-                    className={cn(
-                      "mr-2 h-4 w-4",
-                      isLoading && "animate-spin"
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">Guion</label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={loadingScript || !productName}
+                    onClick={handleGenerateScript}
+                  >
+                    {loadingScript ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="mr-2 h-4 w-4" />
                     )}
-                  />
-                  Regenerar
-                </Button>
+                    Generar con IA
+                  </Button>
+                </div>
+                <Textarea
+                  rows={7}
+                  value={script}
+                  onChange={(e) => setScript(e.target.value)}
+                  placeholder="Escribe el guion o genera uno con IA..."
+                />
+                <p className="text-xs text-muted-foreground">
+                  {script.length} caracteres · se dividira en {nFrames} keyframes
+                </p>
               </div>
             </div>
           )}
 
-          {/* Step 3: Choose Avatar */}
-          {currentStep === 2 && (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {AVATARS.map((avatar) => (
-                <button
-                  key={avatar.id}
-                  onClick={() => setSelectedAvatar(avatar.id)}
-                  className={cn(
-                    "flex flex-col items-center rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50",
-                    selectedAvatar === avatar.id
-                      ? "border-primary bg-primary/5"
-                      : "border-border"
-                  )}
-                >
-                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-primary/5">
-                    <User className="h-10 w-10 text-primary/60" />
+          {step === 1 && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="mb-3 text-sm font-medium">Estilo visual</h3>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {VIDEO_STYLES.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setStyle(s.id)}
+                      className={cn(
+                        "rounded-lg border-2 p-4 text-left transition-colors",
+                        style === s.id
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-accent/40"
+                      )}
+                    >
+                      <p className="font-semibold">{s.name}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {s.description}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="mb-3 text-sm font-medium">Proveedor de video</h3>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {providers.map((p) => (
+                    <button
+                      key={p.name}
+                      type="button"
+                      onClick={() => setProvider(p.name)}
+                      className={cn(
+                        "rounded-lg border-2 p-4 text-left transition-colors",
+                        provider === p.name
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-accent/40"
+                      )}
+                    >
+                      <p className="font-semibold">{p.label}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        ~${PROVIDER_PRICING[p.name].clipCostUsd.toFixed(2)} por clip de{" "}
+                        {SECONDS_PER_CLIP}s
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {advanced && (
+                <div className="space-y-4 rounded-lg border border-dashed p-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium">Parametros del proveedor</h3>
+                    <Select
+                      defaultValue=""
+                      onChange={(e) => {
+                        if (e.target.value) applyPreset(e.target.value);
+                      }}
+                    >
+                      <option value="">Aplicar preset…</option>
+                      {PRESETS.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </Select>
                   </div>
-                  <p className="mt-3 font-semibold text-foreground">
-                    {avatar.name}
-                  </p>
-                  <p className="mt-1 text-center text-xs text-muted-foreground">
-                    {avatar.description}
-                  </p>
-                  {selectedAvatar === avatar.id && (
-                    <Badge className="mt-2 bg-primary/15 text-primary border-primary/20">
-                      Seleccionado
-                    </Badge>
+                  {Object.entries(groupParams(providerDef.paramsSchema)).map(
+                    ([group, fields]) => (
+                      <div key={group} className="space-y-3">
+                        <p className="text-xs font-semibold uppercase text-muted-foreground">
+                          {group}
+                        </p>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {fields.map((f) => (
+                            <ParamField
+                              key={f.key}
+                              field={f}
+                              value={providerParams[f.key]}
+                              onChange={(v) =>
+                                setProviderParams((prev) => ({ ...prev, [f.key]: v }))
+                              }
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )
                   )}
-                </button>
-              ))}
+
+                  <div className="border-t pt-4">
+                    <p className="mb-3 text-xs font-semibold uppercase text-muted-foreground">
+                      gpt-image-1
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium">Tamano</label>
+                        <Select
+                          value={String(imageParams.size || "1024x1536")}
+                          onChange={(e) =>
+                            setImageParams((p) => ({ ...p, size: e.target.value }))
+                          }
+                        >
+                          <option value="1024x1536">1024x1536 (9:16)</option>
+                          <option value="1024x1024">1024x1024 (cuadrado)</option>
+                          <option value="1536x1024">1536x1024 (horizontal)</option>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium">Calidad</label>
+                        <Select
+                          value={String(imageParams.quality || "medium")}
+                          onChange={(e) =>
+                            setImageParams((p) => ({ ...p, quality: e.target.value }))
+                          }
+                        >
+                          <option value="low">Baja (rapido)</option>
+                          <option value="medium">Media</option>
+                          <option value="high">Alta (lento)</option>
+                          <option value="auto">Auto</option>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Step 4: Select Voice */}
-          {currentStep === 3 && (
-            <div className="space-y-3">
-              {VOICES.map((voice) => (
-                <button
-                  key={voice.id}
-                  onClick={() => setSelectedVoice(voice.id)}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50",
-                    selectedVoice === voice.id
-                      ? "border-primary bg-primary/5"
-                      : "border-border"
-                  )}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-primary/5">
-                      <Volume2 className="h-6 w-6 text-primary/60" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-foreground">
-                        {voice.name}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {voice.gender === "female" ? "Femenina" : "Masculina"} ·{" "}
-                        {voice.language.toUpperCase()}
-                      </p>
-                    </div>
+          {step === 2 && (
+            <div className="space-y-6">
+              {frames.length === 0 ? (
+                <div className="rounded-lg border-2 border-dashed p-8 text-center">
+                  <p className="mb-4 text-sm text-muted-foreground">
+                    Se generaran {nFrames} keyframes con gpt-image-1 a partir de tu guion
+                  </p>
+                  <Button
+                    disabled={generatingFrames}
+                    onClick={handleGenerateFrames}
+                    size="lg"
+                  >
+                    {generatingFrames ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Generando {nFrames} keyframes…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        Generar {nFrames} keyframes
+                      </>
+                    )}
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Selecciona los keyframes que quieres animar ({selectedFrames.size}/
+                    {frames.length} seleccionados). Puedes regenerar cualquiera.
+                  </p>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {frames.map((f) => (
+                      <div
+                        key={f.id}
+                        className={cn(
+                          "relative overflow-hidden rounded-lg border-2 transition-colors",
+                          selectedFrames.has(f.id)
+                            ? "border-primary"
+                            : "border-border"
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleFrame(f.id)}
+                          className="block w-full"
+                        >
+                          {f.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={f.imageUrl}
+                              alt={`Frame ${f.order + 1}`}
+                              className="aspect-[9/16] w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex aspect-[9/16] w-full items-center justify-center bg-muted text-xs text-muted-foreground">
+                              Fallo
+                            </div>
+                          )}
+                        </button>
+                        <div className="flex items-center justify-between border-t p-2">
+                          <span className="text-xs font-medium">
+                            Frame {f.order + 1}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={regenerating === f.id}
+                            onClick={() => handleRegenerateFrame(f.id)}
+                          >
+                            <RefreshCw
+                              className={cn(
+                                "h-3 w-3",
+                                regenerating === f.id && "animate-spin"
+                              )}
+                            />
+                          </Button>
+                        </div>
+                        {selectedFrames.has(f.id) && (
+                          <div className="absolute right-2 top-2 rounded-full bg-primary p-1 text-primary-foreground">
+                            <Check className="h-3 w-3" />
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                      }}
-                    >
-                      <Play className="h-4 w-4" />
-                    </Button>
-                    {selectedVoice === voice.id && (
+                </>
+              )}
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-6">
+              <div className="space-y-3">
+                {VOICES.map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => setVoiceId(v.elevenlabsVoiceId)}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded-lg border-2 p-4 text-left transition-colors",
+                      voiceId === v.elevenlabsVoiceId
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:bg-accent/40"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15">
+                        <Volume2 className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-semibold">{v.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {v.gender === "female" ? "Femenina" : "Masculina"} ·{" "}
+                          {v.language.toUpperCase()}
+                        </p>
+                      </div>
+                    </div>
+                    {voiceId === v.elevenlabsVoiceId && (
                       <Badge className="bg-primary/15 text-primary border-primary/20">
                         Seleccionada
                       </Badge>
                     )}
+                  </button>
+                ))}
+              </div>
+
+              {advanced && (
+                <div className="space-y-4 rounded-lg border border-dashed p-4">
+                  <h3 className="text-sm font-medium">Parametros TTS</h3>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {TTS_PARAMS_SCHEMA.map((f) => (
+                      <ParamField
+                        key={f.key}
+                        field={f}
+                        value={ttsParams[f.key]}
+                        onChange={(v) =>
+                          setTtsParams((prev) => ({ ...prev, [f.key]: v }))
+                        }
+                      />
+                    ))}
                   </div>
-                </button>
-              ))}
+                </div>
+              )}
             </div>
           )}
 
-          {/* Step 5: Confirm */}
-          {currentStep === 4 && (
+          {step === 4 && (
             <div className="space-y-6">
-              <div className="space-y-4 rounded-lg border border-border p-4">
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Producto
-                  </span>
-                  <span className="text-sm font-medium text-foreground">
-                    {productName}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Plataforma
-                  </span>
-                  <Badge
-                    className={
-                      platform === "TIKTOK"
-                        ? "bg-pink-500/15 text-pink-400 border-pink-500/20"
-                        : "bg-purple-500/15 text-purple-400 border-purple-500/20"
-                    }
-                  >
-                    {platform}
-                  </Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Duracion
-                  </span>
-                  <span className="text-sm font-medium text-foreground">
-                    {duration}s
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Tono</span>
-                  <span className="text-sm font-medium text-foreground">
-                    {VIDEO_TONES.find((t) => t.id === tone)?.name || tone}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Avatar</span>
-                  <span className="text-sm font-medium text-foreground">
-                    {AVATARS.find((a) => a.id === selectedAvatar)?.name}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Voz</span>
-                  <span className="text-sm font-medium text-foreground">
-                    {VOICES.find((v) => v.id === selectedVoice)?.name}
-                  </span>
-                </div>
-                <div className="border-t border-border pt-4">
-                  <span className="text-sm text-muted-foreground">Script</span>
-                  <p className="mt-2 text-sm text-foreground whitespace-pre-wrap">
-                    {script}
-                  </p>
+              <div className="space-y-3 rounded-lg border p-4 text-sm">
+                <SummaryRow label="Producto" value={productName} />
+                <SummaryRow label="Plataforma" value={platform} />
+                <SummaryRow label="Duracion" value={`${duration}s`} />
+                <SummaryRow
+                  label="Estilo"
+                  value={VIDEO_STYLES.find((s) => s.id === style)?.name || style}
+                />
+                <SummaryRow label="Proveedor" value={providerDef.label} />
+                <SummaryRow
+                  label="Keyframes seleccionados"
+                  value={`${selectedFrames.size} / ${frames.length}`}
+                />
+                <div className="border-t pt-3">
+                  <p className="text-xs text-muted-foreground">Guion</p>
+                  <p className="mt-1 whitespace-pre-wrap">{script}</p>
                 </div>
               </div>
+
               <Button
-                className="w-full"
                 size="lg"
-                disabled={isGenerating}
-                onClick={handleGenerateVideo}
+                className="w-full"
+                disabled={submitting}
+                onClick={handleAnimate}
               >
-                {isGenerating ? (
+                {submitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Iniciando generacion...
+                    Iniciando animacion…
                   </>
                 ) : (
-                  "Generar Video"
+                  <>
+                    <Play className="mr-2 h-4 w-4" />
+                    Animar y componer video final
+                  </>
                 )}
               </Button>
             </div>
@@ -454,27 +673,73 @@ export default function GeneratePage() {
         </CardContent>
       </Card>
 
-      {/* Navigation */}
-      {currentStep > 0 && (
-        <div className="flex justify-between">
+      <div className="flex justify-between">
+        <Button
+          variant="outline"
+          disabled={step === 0}
+          onClick={() => setStep((s) => Math.max(0, s - 1))}
+        >
+          <ChevronLeft className="mr-2 h-4 w-4" /> Anterior
+        </Button>
+        {step < STEPS.length - 1 && (
           <Button
-            variant="outline"
-            onClick={() => setCurrentStep(currentStep - 1)}
+            disabled={!canProceed}
+            onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}
           >
-            <ChevronLeft className="mr-2 h-4 w-4" />
-            Anterior
+            Siguiente <ChevronRight className="ml-2 h-4 w-4" />
           </Button>
-          {currentStep < 4 && (
-            <Button
-              disabled={!canProceed()}
-              onClick={() => setCurrentStep(currentStep + 1)}
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StepIndicator({ current }: { current: number }) {
+  return (
+    <div className="flex items-center justify-between">
+      {STEPS.map((label, i) => (
+        <div key={label} className="flex items-center">
+          <div className="flex flex-col items-center">
+            <div
+              className={cn(
+                "flex h-9 w-9 items-center justify-center rounded-full border-2 text-sm font-medium",
+                i < current
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : i === current
+                    ? "border-primary text-primary"
+                    : "border-muted text-muted-foreground"
+              )}
             >
-              Siguiente
-              <ChevronRight className="ml-2 h-4 w-4" />
-            </Button>
+              {i < current ? <Check className="h-4 w-4" /> : i + 1}
+            </div>
+            <span
+              className={cn(
+                "mt-2 hidden text-xs sm:block",
+                i <= current ? "font-medium text-foreground" : "text-muted-foreground"
+              )}
+            >
+              {label}
+            </span>
+          </div>
+          {i < STEPS.length - 1 && (
+            <div
+              className={cn(
+                "mx-2 h-0.5 w-6 sm:w-12",
+                i < current ? "bg-primary" : "bg-muted"
+              )}
+            />
           )}
         </div>
-      )}
+      ))}
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium">{value}</span>
     </div>
   );
 }

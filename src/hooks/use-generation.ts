@@ -30,7 +30,10 @@ export function useGeneration(videoId: string | null) {
         status: data.generation?.status || data.status,
         videoUrl: data.videoUrl,
         error: data.errorMessage,
-        isLoading: data.status === "PROCESSING" || data.status === "PENDING",
+        isLoading:
+          data.status !== "COMPLETED" &&
+          data.status !== "FAILED" &&
+          data.status !== "AWAITING_FRAME_SELECTION",
       });
     } catch {
       setState((prev) => ({ ...prev, error: "Error al obtener estado", isLoading: false }));
