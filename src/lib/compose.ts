@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { uploadVideo } from "@/lib/s3";
+import { uploadVideo } from "@/lib/storage";
 
 const FFMPEG_PATH = process.env.FFMPEG_PATH || "ffmpeg";
 

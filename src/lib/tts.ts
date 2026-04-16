@@ -1,4 +1,4 @@
-import { uploadVideo } from "@/lib/s3";
+import { uploadVideo } from "@/lib/storage";
 
 const ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1";
 

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getVideoProvider } from "@/lib/video-providers";
-import { uploadVideo } from "@/lib/s3";
+import { uploadVideo } from "@/lib/storage";
 import { generateAndUploadSpeech } from "@/lib/tts";
 import { composeVideo } from "@/lib/compose";
 

@@ -1,12 +1,9 @@
-import OpenAI from "openai";
+import { createOpenAI } from "@ai-sdk/openai";
+import { generateText } from "ai";
 
-let _openai: OpenAI | null = null;
-function getOpenAI(): OpenAI {
-  if (!_openai) {
-    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "sk-placeholder" });
-  }
-  return _openai;
-}
+const openai = createOpenAI({
+  apiKey: process.env.OPENAI_API_KEY || "sk-placeholder",
+});
 
 interface GenerateScriptParams {
   productName: string;
@@ -23,7 +20,7 @@ export async function generateScript(
   const { productName, productDescription, tone, platform, duration, category } =
     params;
 
-  const wordCount = Math.round(duration * 2.5); // ~2.5 words per second in Spanish
+  const wordCount = Math.round(duration * 2.5);
   const platformGuidance =
     platform === "TIKTOK"
       ? "El tono debe ser muy directo, informal y con jerga juvenil. Usa frases cortas y contundentes. Empieza con un gancho que detenga el scroll inmediatamente."
@@ -55,25 +52,18 @@ REGLAS:
 - Adapta el largo exactamente a ${duration} segundos
 - Devuelve SOLO el guion, sin encabezados, sin formato markdown, sin indicaciones de seccion`;
 
-  const response = await getOpenAI().chat.completions.create({
-    model: "gpt-4o",
-    messages: [
-      {
-        role: "system",
-        content:
-          "Eres un experto en UGC y marketing digital en Latinoamerica. Solo respondes con el guion solicitado, sin explicaciones adicionales.",
-      },
-      { role: "user", content: prompt },
-    ],
+  const { text } = await generateText({
+    model: openai("gpt-4o"),
+    system:
+      "Eres un experto en UGC y marketing digital en Latinoamerica. Solo respondes con el guion solicitado, sin explicaciones adicionales.",
+    prompt,
     temperature: 0.8,
-    max_tokens: 1000,
+    maxOutputTokens: 1000,
   });
 
-  const script = response.choices[0]?.message?.content?.trim();
-
-  if (!script) {
+  if (!text) {
     throw new Error("No se pudo generar el guion");
   }
 
-  return script;
+  return text.trim();
 }

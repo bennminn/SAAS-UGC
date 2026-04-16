@@ -445,7 +445,7 @@ export default function GeneratePage() {
 
                   <div className="border-t pt-4">
                     <p className="mb-3 text-xs font-semibold uppercase text-muted-foreground">
-                      gpt-image-1
+                      gpt-image-1 (Vercel AI SDK)
                     </p>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-1">
@@ -459,20 +459,6 @@ export default function GeneratePage() {
                           <option value="1024x1536">1024x1536 (9:16)</option>
                           <option value="1024x1024">1024x1024 (cuadrado)</option>
                           <option value="1536x1024">1536x1024 (horizontal)</option>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium">Calidad</label>
-                        <Select
-                          value={String(imageParams.quality || "medium")}
-                          onChange={(e) =>
-                            setImageParams((p) => ({ ...p, quality: e.target.value }))
-                          }
-                        >
-                          <option value="low">Baja (rapido)</option>
-                          <option value="medium">Media</option>
-                          <option value="high">Alta (lento)</option>
-                          <option value="auto">Auto</option>
                         </Select>
                       </div>
                     </div>

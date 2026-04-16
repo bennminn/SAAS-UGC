@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { uploadVideo } from "@/lib/s3";
+import { uploadVideo } from "@/lib/storage";
 
 /**
  * POST /api/webhooks/video-provider?videoId=...

@@ -10,9 +10,8 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.52",
-    "@aws-sdk/client-s3": "^3.1025.0",
-    "@aws-sdk/s3-request-presigner": "^3.1025.0",
     "@prisma/client": "^6.19.3",
+    "@supabase/supabase-js": "^2.103.2",
     "ai": "^6.0.159",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",

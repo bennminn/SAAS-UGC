@@ -1,32 +1,20 @@
-import OpenAI from "openai";
-import { uploadVideo } from "@/lib/s3";
+import { createOpenAI } from "@ai-sdk/openai";
+import { experimental_generateImage as generateImage } from "ai";
+import { uploadVideo } from "@/lib/storage";
 
-let _openai: OpenAI | null = null;
-function getOpenAI(): OpenAI {
-  if (!_openai) {
-    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "sk-placeholder" });
-  }
-  return _openai;
-}
+const openai = createOpenAI({
+  apiKey: process.env.OPENAI_API_KEY || "sk-placeholder",
+});
 
 export type ImageSize = "1024x1536" | "1024x1024" | "1536x1024";
-export type ImageQuality = "low" | "medium" | "high" | "auto";
-export type ImageBackground = "transparent" | "opaque" | "auto";
 
 export interface ImageGenParams {
-  // Defaults que tambien expone el modo avanzado:
   size?: ImageSize; // 9:16 para UGC = 1024x1536
-  quality?: ImageQuality;
-  background?: ImageBackground;
-  moderation?: "auto" | "low";
   n?: number;
 }
 
 export const DEFAULT_IMAGE_PARAMS: Required<ImageGenParams> = {
   size: "1024x1536",
-  quality: "medium",
-  background: "auto",
-  moderation: "auto",
   n: 1,
 };
 
@@ -58,7 +46,6 @@ export function buildFramePrompts(args: {
       beats.push(sentences.slice(i * perBeat, (i + 1) * perBeat).join(" "));
     }
   } else {
-    // Pocas oraciones: repartir texto en chunks de caracteres.
     const chunk = Math.ceil(cleanScript.length / nFrames);
     for (let i = 0; i < nFrames; i++) {
       beats.push(cleanScript.slice(i * chunk, (i + 1) * chunk));
@@ -81,7 +68,7 @@ export function buildFramePrompts(args: {
 }
 
 /**
- * Genera una imagen con gpt-image-1 y la sube a S3.
+ * Genera una imagen con gpt-image-1 via Vercel AI SDK y la sube a Supabase Storage.
  * Devuelve la URL publica.
  */
 export async function generateFrameImage(args: {
@@ -95,20 +82,15 @@ export async function generateFrameImage(args: {
   const merged = { ...DEFAULT_IMAGE_PARAMS, ...(params || {}) };
 
   const model = process.env.OPENAI_IMAGE_MODEL || "gpt-image-1";
-  const resp = await getOpenAI().images.generate({
-    model,
+
+  const { image } = await generateImage({
+    model: openai.image(model),
     prompt,
     size: merged.size,
-    quality: merged.quality,
-    background: merged.background,
-    moderation: merged.moderation,
     n: 1,
   });
 
-  const b64 = resp.data?.[0]?.b64_json;
-  if (!b64) throw new Error("gpt-image-1 no devolvio imagen");
-
-  const buffer = Buffer.from(b64, "base64");
+  const buffer = Buffer.from(image.base64, "base64");
   const key = `frames/${userId}/${videoId}/${frameId}.png`;
   return uploadVideo(key, buffer, "image/png");
 }
