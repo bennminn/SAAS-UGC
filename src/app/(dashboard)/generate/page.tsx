@@ -6,10 +6,12 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Film,
   Loader2,
   Play,
   RefreshCw,
   Sparkles,
+  Type,
   Volume2,
   Wand2,
 } from "lucide-react";
@@ -37,13 +39,10 @@ import { TTS_PARAMS_SCHEMA, DEFAULT_TTS_PARAMS } from "@/lib/tts";
 import { ParamField, groupParams } from "@/components/generate/param-field";
 import { cn } from "@/lib/utils";
 
-const STEPS = [
-  "Guion y contexto",
-  "Estilo y proveedor",
-  "Keyframes",
-  "Voz y audio",
-  "Confirmar",
-];
+type GenerationMode = "i2v" | "t2v";
+
+const I2V_STEPS = ["Guion y contexto", "Estilo y proveedor", "Keyframes", "Voz y audio", "Confirmar"];
+const T2V_STEPS = ["Guion y contexto", "Proveedor T2V", "Voz y audio", "Confirmar"];
 
 type Frame = {
   id: string;
@@ -54,8 +53,11 @@ type Frame = {
 
 export default function GeneratePage() {
   const router = useRouter();
+  const [mode, setMode] = useState<GenerationMode>("i2v");
   const [step, setStep] = useState(0);
   const [advanced, setAdvanced] = useState(false);
+
+  const STEPS = mode === "t2v" ? T2V_STEPS : I2V_STEPS;
 
   // Step 1
   const [title, setTitle] = useState("");
@@ -67,30 +69,37 @@ export default function GeneratePage() {
   const [script, setScript] = useState("");
   const [loadingScript, setLoadingScript] = useState(false);
 
-  // Step 2
+  // Step 2 — provider + params
   const [style, setStyle] = useState<string>(VIDEO_STYLES[0].id);
   const [provider, setProvider] = useState<VideoProviderName>("SEEDANCE");
   const providers = useMemo(() => listVideoProviders(), []);
+  const t2vProviders = useMemo(() => providers.filter((p) => p.supportsT2V), [providers]);
   const providerDef = useMemo(() => getVideoProvider(provider), [provider]);
+
   const [providerParams, setProviderParams] = useState<Record<string, unknown>>({
     ...providerDef.defaults,
   });
+  const [t2vProviderParams, setT2vProviderParams] = useState<Record<string, unknown>>({
+    ...(providerDef.t2vDefaults || providerDef.defaults),
+  });
   useEffect(() => {
-    setProviderParams({ ...getVideoProvider(provider).defaults });
+    const p = getVideoProvider(provider);
+    setProviderParams({ ...p.defaults });
+    setT2vProviderParams({ ...(p.t2vDefaults || p.defaults) });
   }, [provider]);
 
   const [imageParams, setImageParams] = useState<Record<string, unknown>>({
     ...DEFAULT_IMAGE_PARAMS,
   });
 
-  // Step 3
+  // Step 3 — keyframes (I2V only)
   const [videoId, setVideoId] = useState<string | null>(null);
   const [frames, setFrames] = useState<Frame[]>([]);
   const [selectedFrames, setSelectedFrames] = useState<Set<string>>(new Set());
   const [generatingFrames, setGeneratingFrames] = useState(false);
   const [regenerating, setRegenerating] = useState<string | null>(null);
 
-  // Step 4
+  // Voice
   const [voiceId, setVoiceId] = useState<string>(VOICES[0].elevenlabsVoiceId);
   const [ttsParams, setTtsParams] = useState<Record<string, unknown>>({
     ...DEFAULT_TTS_PARAMS,
@@ -103,6 +112,21 @@ export default function GeneratePage() {
     () => Math.max(1, Math.ceil(duration / SECONDS_PER_CLIP)),
     [duration]
   );
+
+  // Reset step when mode changes
+  useEffect(() => {
+    setStep(0);
+    setFrames([]);
+    setVideoId(null);
+    setSelectedFrames(new Set());
+  }, [mode]);
+
+  // Ensure T2V mode has a T2V-capable provider selected
+  useEffect(() => {
+    if (mode === "t2v" && !providerDef.supportsT2V && t2vProviders.length > 0) {
+      setProvider(t2vProviders[0].name);
+    }
+  }, [mode, providerDef.supportsT2V, t2vProviders]);
 
   async function handleGenerateScript() {
     setLoadingScript(true);
@@ -205,29 +229,67 @@ export default function GeneratePage() {
     }
   }
 
+  async function handleTextToVideo() {
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/videos/text-to-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title || productName || "Video T2V",
+          script,
+          businessContext,
+          platform,
+          duration,
+          provider,
+          providerParams: t2vProviderParams,
+          ttsParams,
+          voiceId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error");
+      router.push(`/generate/${data.videoId}`);
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function applyPreset(presetId: string) {
     const p = PRESETS.find((x) => x.id === presetId);
     if (!p) return;
     const merge = p.params[provider];
-    if (merge) setProviderParams((prev) => ({ ...prev, ...merge }));
+    if (merge) {
+      if (mode === "t2v") setT2vProviderParams((prev) => ({ ...prev, ...merge }));
+      else setProviderParams((prev) => ({ ...prev, ...merge }));
+    }
   }
 
   const canProceed = (() => {
+    if (mode === "t2v") {
+      switch (step) {
+        case 0: return productName.length > 0 && script.length > 20;
+        case 1: return Boolean(provider) && providerDef.supportsT2V;
+        case 2: return Boolean(voiceId);
+        case 3: return true;
+        default: return false;
+      }
+    }
     switch (step) {
-      case 0:
-        return productName.length > 0 && script.length > 20;
-      case 1:
-        return Boolean(style && provider);
-      case 2:
-        return frames.length > 0 && selectedFrames.size > 0;
-      case 3:
-        return Boolean(voiceId);
-      case 4:
-        return true;
-      default:
-        return false;
+      case 0: return productName.length > 0 && script.length > 20;
+      case 1: return Boolean(style && provider);
+      case 2: return frames.length > 0 && selectedFrames.size > 0;
+      case 3: return Boolean(voiceId);
+      case 4: return true;
+      default: return false;
     }
   })();
+
+  // Determine which content to render for current step
+  const isVoiceStep = (mode === "t2v" && step === 2) || (mode === "i2v" && step === 3);
+  const isConfirmStep = (mode === "t2v" && step === 3) || (mode === "i2v" && step === 4);
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -235,7 +297,9 @@ export default function GeneratePage() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Generar Video</h1>
           <p className="mt-1 text-muted-foreground">
-            Guion → keyframes → animacion → narracion TTS
+            {mode === "t2v"
+              ? "Guion → Seedance T2V → narracion TTS"
+              : "Guion → keyframes → animacion → narracion TTS"}
           </p>
         </div>
         <label className="flex items-center gap-2 text-sm">
@@ -250,7 +314,47 @@ export default function GeneratePage() {
         </label>
       </div>
 
-      <StepIndicator current={step} />
+      {/* Mode selector */}
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={() => setMode("i2v")}
+          className={cn(
+            "flex flex-1 items-center gap-3 rounded-lg border-2 p-4 text-left transition-colors",
+            mode === "i2v"
+              ? "border-primary bg-primary/5"
+              : "border-border hover:bg-accent/40"
+          )}
+        >
+          <Film className="h-5 w-5 shrink-0 text-primary" />
+          <div>
+            <p className="font-semibold text-sm">Imagen a Video (I2V)</p>
+            <p className="text-xs text-muted-foreground">
+              gpt-image-1 genera keyframes → proveedor los anima
+            </p>
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("t2v")}
+          className={cn(
+            "flex flex-1 items-center gap-3 rounded-lg border-2 p-4 text-left transition-colors",
+            mode === "t2v"
+              ? "border-primary bg-primary/5"
+              : "border-border hover:bg-accent/40"
+          )}
+        >
+          <Type className="h-5 w-5 shrink-0 text-primary" />
+          <div>
+            <p className="font-semibold text-sm">Texto a Video (T2V)</p>
+            <p className="text-xs text-muted-foreground">
+              Seedance 2.0 genera el video directo desde el guion
+            </p>
+          </div>
+        </button>
+      </div>
+
+      <StepIndicator current={step} steps={STEPS} />
 
       <Card>
         <CardHeader>
@@ -346,13 +450,14 @@ export default function GeneratePage() {
                   placeholder="Escribe el guion o genera uno con IA..."
                 />
                 <p className="text-xs text-muted-foreground">
-                  {script.length} caracteres · se dividira en {nFrames} keyframes
+                  {script.length} caracteres
+                  {mode === "i2v" && ` · se dividira en ${nFrames} keyframes`}
                 </p>
               </div>
             </div>
           )}
 
-          {step === 1 && (
+          {step === 1 && mode === "i2v" && (
             <div className="space-y-6">
               <div>
                 <h3 className="mb-3 text-sm font-medium">Estilo visual</h3>
@@ -468,7 +573,83 @@ export default function GeneratePage() {
             </div>
           )}
 
-          {step === 2 && (
+          {step === 1 && mode === "t2v" && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="mb-3 text-sm font-medium">Proveedor Texto a Video</h3>
+                {t2vProviders.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No hay proveedores con soporte T2V configurados.
+                  </p>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {t2vProviders.map((p) => (
+                      <button
+                        key={p.name}
+                        type="button"
+                        onClick={() => setProvider(p.name)}
+                        className={cn(
+                          "rounded-lg border-2 p-4 text-left transition-colors",
+                          provider === p.name
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:bg-accent/40"
+                        )}
+                      >
+                        <p className="font-semibold">{p.label}</p>
+                        <Badge variant="secondary" className="mt-1 text-xs">
+                          T2V
+                        </Badge>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {advanced && providerDef.t2vParamsSchema && (
+                <div className="space-y-4 rounded-lg border border-dashed p-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium">Parametros T2V</h3>
+                    <Select
+                      defaultValue=""
+                      onChange={(e) => {
+                        if (e.target.value) applyPreset(e.target.value);
+                      }}
+                    >
+                      <option value="">Aplicar preset…</option>
+                      {PRESETS.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  {Object.entries(groupParams(providerDef.t2vParamsSchema)).map(
+                    ([group, fields]) => (
+                      <div key={group} className="space-y-3">
+                        <p className="text-xs font-semibold uppercase text-muted-foreground">
+                          {group}
+                        </p>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {fields.map((f) => (
+                            <ParamField
+                              key={f.key}
+                              field={f}
+                              value={t2vProviderParams[f.key]}
+                              onChange={(v) =>
+                                setT2vProviderParams((prev) => ({ ...prev, [f.key]: v }))
+                              }
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === 2 && mode === "i2v" && (
             <div className="space-y-6">
               {frames.length === 0 ? (
                 <div className="rounded-lg border-2 border-dashed p-8 text-center">
@@ -559,7 +740,7 @@ export default function GeneratePage() {
             </div>
           )}
 
-          {step === 3 && (
+          {isVoiceStep && (
             <div className="space-y-6">
               <div className="space-y-3">
                 {VOICES.map((v) => (
@@ -615,21 +796,26 @@ export default function GeneratePage() {
             </div>
           )}
 
-          {step === 4 && (
+          {isConfirmStep && (
             <div className="space-y-6">
               <div className="space-y-3 rounded-lg border p-4 text-sm">
+                <SummaryRow label="Modo" value={mode === "t2v" ? "Texto a Video (T2V)" : "Imagen a Video (I2V)"} />
                 <SummaryRow label="Producto" value={productName} />
                 <SummaryRow label="Plataforma" value={platform} />
                 <SummaryRow label="Duracion" value={`${duration}s`} />
-                <SummaryRow
-                  label="Estilo"
-                  value={VIDEO_STYLES.find((s) => s.id === style)?.name || style}
-                />
+                {mode === "i2v" && (
+                  <SummaryRow
+                    label="Estilo"
+                    value={VIDEO_STYLES.find((s) => s.id === style)?.name || style}
+                  />
+                )}
                 <SummaryRow label="Proveedor" value={providerDef.label} />
-                <SummaryRow
-                  label="Keyframes seleccionados"
-                  value={`${selectedFrames.size} / ${frames.length}`}
-                />
+                {mode === "i2v" && (
+                  <SummaryRow
+                    label="Keyframes seleccionados"
+                    value={`${selectedFrames.size} / ${frames.length}`}
+                  />
+                )}
                 <div className="border-t pt-3">
                   <p className="text-xs text-muted-foreground">Guion</p>
                   <p className="mt-1 whitespace-pre-wrap">{script}</p>
@@ -640,17 +826,19 @@ export default function GeneratePage() {
                 size="lg"
                 className="w-full"
                 disabled={submitting}
-                onClick={handleAnimate}
+                onClick={mode === "t2v" ? handleTextToVideo : handleAnimate}
               >
                 {submitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Iniciando animacion…
+                    {mode === "t2v" ? "Generando video…" : "Iniciando animacion…"}
                   </>
                 ) : (
                   <>
                     <Play className="mr-2 h-4 w-4" />
-                    Animar y componer video final
+                    {mode === "t2v"
+                      ? "Generar video con Seedance T2V"
+                      : "Animar y componer video final"}
                   </>
                 )}
               </Button>
@@ -680,10 +868,10 @@ export default function GeneratePage() {
   );
 }
 
-function StepIndicator({ current }: { current: number }) {
+function StepIndicator({ current, steps }: { current: number; steps: string[] }) {
   return (
     <div className="flex items-center justify-between">
-      {STEPS.map((label, i) => (
+      {steps.map((label, i) => (
         <div key={label} className="flex items-center">
           <div className="flex flex-col items-center">
             <div
@@ -707,7 +895,7 @@ function StepIndicator({ current }: { current: number }) {
               {label}
             </span>
           </div>
-          {i < STEPS.length - 1 && (
+          {i < steps.length - 1 && (
             <div
               className={cn(
                 "mx-2 h-0.5 w-6 sm:w-12",

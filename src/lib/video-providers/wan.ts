@@ -142,6 +142,7 @@ async function getStatus(jobId: string): Promise<VideoJobStatus> {
 export const wanProvider: VideoProvider = {
   name: "WAN",
   label: "Wan 2.x (Alibaba)",
+  supportsT2V: false,
   paramsSchema: schema,
   defaults,
   imageToVideo,

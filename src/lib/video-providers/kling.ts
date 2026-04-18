@@ -163,6 +163,7 @@ async function getStatus(jobId: string): Promise<VideoJobStatus> {
 export const klingProvider: VideoProvider = {
   name: "KLING",
   label: "Kling 2.x (Kuaishou)",
+  supportsT2V: false,
   paramsSchema: schema,
   defaults,
   imageToVideo,
