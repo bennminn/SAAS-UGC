@@ -34,7 +34,7 @@ export default function AdminUsersPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
+        <Button variant="ghost" size="icon" asChild aria-label="Volver a administracion">
           <Link href="/admin"><ArrowLeft className="h-5 w-5" /></Link>
         </Button>
         <div>
