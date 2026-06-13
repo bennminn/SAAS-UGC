@@ -1,0 +1,3 @@
+## 2025-02-24 - Missing ARIA labels on generic icon buttons
+**Learning:** Found a pattern where multiple "back" buttons and mobile menu toggles (`variant="ghost" size="icon"`) using standard Lucide icons (`ArrowLeft`, `Menu`, `X`) lacked accessible labels. Since these use generic icon shapes, screen readers won't convey their destination or action without an explicit `aria-label`.
+**Action:** Next time I encounter icon-only navigation buttons in Next.js or generic UI patterns, I must immediately verify if an `aria-label` provides context for screen readers.

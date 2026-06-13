@@ -56,6 +56,7 @@ export default function DashboardLayout({
             variant="ghost"
             size="icon"
             onClick={() => setSidebarOpen(!sidebarOpen)}
+            aria-label={sidebarOpen ? "Cerrar menú" : "Abrir menú"}
           >
             {sidebarOpen ? (
               <X className="h-6 w-6" />
